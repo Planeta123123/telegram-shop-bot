@@ -1,0 +1,67 @@
+import logging
+from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.dispatcher import Dispatcher, filters
+from aiogram.utils import executor
+
+API_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
+
+logging.basicConfig(level=logging.INFO)
+
+bot = Bot(token=API_TOKEN)
+dp = Dispatcher(bot, storage=MemoryStorage())
+
+# Стейт-машина для додавання товару
+class AdminState(StatesGroup):
+    waiting_for_product_name = State()
+    waiting_for_product_price = State()
+
+# Команда старт
+@dp.message_handler(commands=['start'])
+async def start_cmd(message: types.Message):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(InlineKeyboardButton("Каталог", callback_data="catalog"))
+    await message.answer("Ласкаво просимо до магазину!", reply_markup=keyboard)
+
+# Адмін: додати товар
+@dp.message_handler(commands=['add_product'])
+async def add_product(message: types.Message):
+    await message.answer("Введіть назву товару:")
+    await AdminState.waiting_for_product_name.set()
+
+@dp.message_handler(state=AdminState.waiting_for_product_name)
+async def product_name_entered(message: types.Message, state: FSMContext):
+    await state.update_data(product_name=message.text)
+    await message.answer("Введіть ціну товару (у гривнях):")
+    await AdminState.waiting_for_product_price.set()
+
+@dp.message_handler(state=AdminState.waiting_for_product_price)
+async def product_price_entered(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    product_name = data.get("product_name")
+    product_price = message.text
+
+    # Тут буде додавання до бази даних
+    await message.answer(f"Товар '{product_name}' з ціною {product_price} грн додано!")
+    await state.finish()
+
+# Обробка натискання на каталог
+@dp.callback_query_handler(lambda c: c.data == 'catalog')
+async def show_catalog(callback_query: types.CallbackQuery):
+    # Тут буде завантаження товарів з бази даних
+    await bot.send_message(callback_query.from_user.id, "Каталог товарів поки що порожній")
+
+# Запуск бота
+if __name__ == '__main__':
+    executor.start_polling(dp, skip_updates=True)
+
+# Інструкція для розгортання на Render:
+# 1. Зареєструйтеся на https://render.com/
+# 2. Створіть новий проект (New Web Service).
+# 3. Підключіть свій GitHub репозиторій із кодом бота.
+# 4. Вкажіть команду запуску: python bot.py
+# 5. В розділі Environment Variables додайте змінну API_TOKEN зі значенням вашого токена від BotFather.
+# 6. Натисніть Deploy. Після завершення розгортання бот буде працювати навіть при вимкненому комп'ютері.
